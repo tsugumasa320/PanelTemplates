@@ -38,7 +38,26 @@ How to use it?
 
 Folder naming: `1U_Intellijel_XXHP_Blank`
 
-These templates for now just include edge cuts of the right size with plated oval holes.
+##### Converter panels (Intellijel)
+
+These mount with M3 screws and nuts (no tapped holes on the adapter). Module mounts use **rounded Edge.Cuts slots** (capsule / stadium shape) so HP and position are flexible.
+
+**`3U_to_1U_Intellijel_26HP`** — put rotated 3U modules into an Intellijel 1U row
+
+- Outer size: 131.7 × 39.65 mm (26HP × Intellijel 1U)
+- Rail slots: horizontal 8.0 × 3.2 mm at X = 7.5 / 124.34, Y = 3.0 / 36.65
+- Center window: 112 × 22 mm (fits up to about 4HP of 3U)
+- Module slots: vertical 3.2 × 18.0 mm at X = 4.6 / 127.1 (122.5 mm apart) for Y adjustment across 2–4HP
+
+**`1U_to_3U_Intellijel_16HP`** — put Intellijel 1U modules into a 3U row (3 tiers)
+
+- Outer size: 80.9 × 128.5 mm (16HP × 3U)
+- Rail holes: plated ovals same as `3U_16HP_Blank` (X = 7.5 / 73.54, Y = 3.0 / 125.5)
+- Three 1U rows; each row has top/bottom horizontal slots (3.2 mm tall, X = 10.0–70.9) so modules can sit anywhere along ~14HP
+
+Dimensions follow [Doepfer A-100](https://doepfer.de/a100_man/a100m_e.htm) and [Intellijel 1U Technical Specifications](https://intellijel.com/support/1u-technical-specifications/). Commercial references for layout size: 26HP 3U→1U and 16HP 3-row 1U→3U adapters.
+
+Blank templates include edge cuts with plated oval holes; converters add window / long-slot cutouts for flexible mounting.
 ![This is an image](8HP.png)
 
 ###### Shoutout to [@mzourack](https://github.com/mzourack) for his oval holes lol.
