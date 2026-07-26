@@ -57,6 +57,46 @@ These mount with M3 screws and nuts (no tapped holes on the adapter). Module mou
 
 Dimensions follow [Doepfer A-100](https://doepfer.de/a100_man/a100m_e.htm) and [Intellijel 1U Technical Specifications](https://intellijel.com/support/1u-technical-specifications/). Commercial references for layout size: 26HP 3U→1U and 16HP 3-row 1U→3U adapters.
 
+##### Relief-textured panels (1U Intellijel 8HP)
+
+`relief/` holds 36 blanks carrying a full-bleed repeating geometric pattern.
+Nothing is milled through the board: the texture comes from the copper and
+soldermask layers a plain PCB process already gives you, so each panel is a
+normal 1.6 mm blank with all four mounting pads intact and costs exactly what
+an untextured blank costs. Copy any folder next to the other templates for
+KiCad to list it.
+
+Two ways to realise the same pattern, selected when you generate:
+
+| Style | How it is built | Result |
+|-------|-----------------|--------|
+| `emboss` (default) | Pattern on `F.Cu`, soldermask left closed over the whole panel | One colour throughout; the pattern stands 35 µm proud and reads as relief that catches the light. Order **2 oz outer copper** to double the step to 70 µm. |
+| `expose` | Solid copper pour with the pattern opened in `F.Mask` | Pattern comes out as bare plated metal against matte mask: strong gloss and colour contrast, almost no step. |
+
+The stackup is written into every panel as black soldermask over ENIG, which is
+both what the fab needs and what makes KiCad's 3D view look right.
+
+Regenerate from the repo root:
+
+```bash
+python3 _gen_relief.py                  # emboss, into relief/
+python3 _gen_relief.py --style expose
+```
+
+The generator clips every pattern to a 0.3 mm copper-free border, then checks
+each panel for copper features and gaps below 0.15 mm so nothing falls under a
+standard 5 mil process.
+
+| Family | Patterns |
+|--------|----------|
+| Tilings | `Honeycomb` `Triangles` `Harlequin` `Basketweave` `OctagonSquare` `Herringbone` `Parquet` `Rhombille` `Pinwheel` `CrossPlus` `TriHexSolid` `Waffle` |
+| Lattices | `TriHex` `Kagome` `Asanoha` `FlowerOfLife` `HexRing` `RingLattice` `NestedSquares` `StepTerrace` `Coffer` `RivetGrid` |
+| Bands and curves | `Chevron` `Ribs` `DiagonalRibs` `Interlace` `Truchet` `ScallopFan` `FishScale` `GreekKey` |
+| Studs and dots | `DiamondPlate` `Dimples` `StarGrid` `DotGrid` `DotStagger` `DotDuo` |
+
+`python3 _preview_patterns.py --mode emboss` renders the whole set as a PNG
+contact sheet if you want to browse before generating.
+
 Blank templates include edge cuts with plated oval holes; converters add window / long-slot cutouts for flexible mounting.
 ![This is an image](8HP.png)
 
