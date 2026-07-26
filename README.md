@@ -40,7 +40,7 @@ Folder naming: `1U_Intellijel_XXHP_Blank`
 
 ##### Converter panels (Intellijel)
 
-These mount with M3 screws and nuts (no tapped holes on the adapter). Module mounts use **rounded Edge.Cuts slots** (capsule / stadium shape) so HP and position are flexible.
+These mount with M3 screws and nuts (no tapped holes on the adapter). Module mounts use **rounded Edge.Cuts slots** (capsule / stadium shape) so HP and position are flexible. On the horizontal 1U→3U panels the outer slots are also the 3U rail mounts.
 
 **`3U_to_1U_Intellijel_26HP`** — put rotated 3U modules into an Intellijel 1U row
 
@@ -49,13 +49,25 @@ These mount with M3 screws and nuts (no tapped holes on the adapter). Module mou
 - Center window: 112 × 22 mm (fits up to about 4HP of 3U)
 - Module slots: vertical 3.2 × 18.0 mm at X = 4.6 / 127.1 (122.5 mm apart) for Y adjustment across 2–4HP
 
-**`1U_to_3U_Intellijel_16HP`** — put Intellijel 1U modules into a 3U row (3 tiers)
+**`1U_to_3U_Intellijel_08HP` / `1U_to_3U_Intellijel_18HP`** — put Intellijel 1U modules into a 3U row (3 tiers, horizontal)
 
-- Outer size: 80.9 × 128.5 mm (16HP × 3U)
-- Rail holes: plated ovals same as `3U_16HP_Blank` (X = 7.5 / 73.54, Y = 3.0 / 125.5)
-- Three 1U rows; each row has top/bottom horizontal slots (3.2 mm tall, X = 10.0–70.9) so modules can sit anywhere along ~14HP
+Same geometry as commercial horizontal adapters (e.g. Abyss Devices): an N HP panel holds up to (N − 2) HP of 1U modules per row, with ~1 HP side rails. The top and bottom slots sit on the 3U rail centres, so one milled slot mounts both the adapter and the outer modules — no separate plated rail pads.
 
-Dimensions follow [Doepfer A-100](https://doepfer.de/a100_man/a100m_e.htm) and [Intellijel 1U Technical Specifications](https://intellijel.com/support/1u-technical-specifications/). Commercial references for layout size: 26HP 3U→1U and 16HP 3-row 1U→3U adapters.
+| Panel | Size | Per-row capacity | Window | Side rail |
+| --- | --- | --- | --- | --- |
+| 8HP | 40.3 × 128.5 mm | 6HP (30.0 mm) | 30.0 × 22 mm | 5.15 mm |
+| 18HP | 91.3 × 128.5 mm | 16HP (80.9 mm) | 80.9 × 22 mm | 5.20 mm |
+
+- Three Intellijel 1U rows (39.65 mm), flush with the top and bottom of the 3U outline; the leftover 9.55 mm is split between the two inter-row gaps
+- Outer slot centres at Y = 3.0 / 125.5 (shared with the 3U rails); inner slots 33.65 mm apart within each row
+- Each row: body window + horizontal 3.2 mm capsule slots above and below (screw+nut)
+- Webs between window and slots: 4.225 mm
+
+```bash
+python3 _gen_1u_to_3u.py          # 8HP and 18HP
+```
+
+Dimensions follow [Doepfer A-100](https://doepfer.de/a100_man/a100m_e.htm) and [Intellijel 1U Technical Specifications](https://intellijel.com/support/1u-technical-specifications/).
 
 ##### Relief-textured panels (1U Intellijel 8HP)
 
@@ -130,11 +142,16 @@ likely to query.
 ```bash
 python3 _export_gerbers.py                          # the test panel
 python3 _export_gerbers.py relief/1U_Intellijel_08HP_Relief_Ribs
+python3 _export_gerbers.py 3U_to_1U_Intellijel_26HP  # any blank works too
 ```
 
-The zip lands in `gerbers/`. Order it as 2 layers, 1.6 mm, black soldermask,
-ENIG, and ask for **2 oz outer copper**: on an emboss panel the copper weight
-is what sets how deep the texture feels.
+The zip lands in `gerbers/`, and the note adapts to the board. For a relief
+panel it tells the fab that the closed soldermask and net-less copper are
+intentional, and asks for **2 oz outer copper**, since on an emboss panel the
+copper weight is what sets how deep the texture feels. For a plain blank it
+says the opposite: the copper layers are empty because the panel is mechanical,
+which is worth stating up front because some fabs treat a board with no copper
+as a broken upload.
 
 Blank templates include edge cuts with plated oval holes; converters add window / long-slot cutouts for flexible mounting.
 ![This is an image](8HP.png)

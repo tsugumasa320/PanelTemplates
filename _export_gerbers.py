@@ -30,28 +30,48 @@ CLI_CANDIDATES = (
     "/usr/bin/kicad-cli",
 )
 
-NOTES = """Fabrication notes for {name}
+NOTES_HEAD = """Fabrication notes for {name}
 
 Board            {size}, 2 layers, 1.6 mm FR4
-Soldermask       black, both sides
+Soldermask       {mask}
 Silkscreen       white
-Surface finish   ENIG
-Outer copper     2 oz (70 um) preferred. The texture is copper relief under
+Surface finish   {finish}
+"""
+
+# Only true of the relief panels, where the copper is decorative and covered.
+NOTES_RELIEF = """Outer copper     2 oz (70 um) preferred. The texture is copper relief under
                  closed soldermask, so copper weight is what sets how deep it
                  feels. 1 oz (35 um) also works, at half the depth.
-Holes            plated slots 5.0 x 3.2 mm for M3 mounting screws
 
 Two things about this board are deliberate and should not be "corrected":
 
 - The soldermask has no openings except over the mounting pads. The pattern is
   meant to stay covered; that is what keeps the panel a single colour and lets
   the copper read as relief.
-- The front copper is unconnected artwork with no net. There is no circuit on
-  this board, the copper only exists to form the texture.
-
-Gerbers are Gerber X2 with Protel file extensions. Drill file is Excellon in
-mm, absolute origin, slots routed.
+- The copper is unconnected artwork with no net. There is no circuit on this
+  board, the copper only exists to form the texture.
 """
+
+NOTES_PADS = """
+This is a mechanical panel with no circuit on it. The only copper is the plated
+mounting pads, so the copper layers look nearly empty. That is not a mistake or
+a missing file. Everything else is on Edge.Cuts, including the module cutout.
+Please quote it as a plain 2 layer board.
+"""
+
+NOTES_BARE = """
+This is a mechanical panel with no circuit on it, so the copper layers are
+empty and there is nothing to drill. That is not a mistake or a missing file.
+Everything is on Edge.Cuts, including the mounting slots, which are milled
+rather than drilled. Please quote it as a plain 2 layer board rather than
+rejecting it for having no copper.
+"""
+
+NOTES_TAIL = """
+Gerbers are Gerber X2 with Protel file extensions.{drill}
+"""
+
+NOTES_DRILL = "\nDrill file is Excellon in mm, absolute origin, slots routed."
 
 
 def kicad_cli():
@@ -103,12 +123,49 @@ def drc(cli, pcb, work):
         print(f"  DRC: {severity:<9} {rule:<28} x{count}")
 
 
-def board_size(pcb):
-    for line in pcb.read_text().splitlines():
-        if 'layer "Edge.Cuts"' in line and "gr_rect" in line:
-            end = line.split("(end ", 1)[1].split(")", 1)[0].split()
-            return f"{end[0]} x {end[1]} mm"
-    return "see Edge.Cuts"
+def board_size(text):
+    """Extent of the Edge.Cuts outline, whatever primitives it is drawn with."""
+    xs, ys = [], []
+    for line in text.splitlines():
+        if 'layer "Edge.Cuts"' not in line:
+            continue
+        for key in ("(start ", "(end ", "(mid ", "(center "):
+            for part in line.split(key)[1:]:
+                nums = part.split(")", 1)[0].split()
+                if len(nums) == 2:
+                    try:
+                        xs.append(float(nums[0]))
+                        ys.append(float(nums[1]))
+                    except ValueError:
+                        pass
+    if not xs:
+        return "see Edge.Cuts"
+    return f"{max(xs) - min(xs):.4g} x {max(ys) - min(ys):.4g} mm"
+
+
+def notes(pcb):
+    """Write the notes the board actually warrants.
+
+    The relief panels need the fab told that bare-looking copper under closed
+    mask is intentional; the plain converter panels have no copper at all and
+    need the opposite warning.
+    """
+    text = pcb.read_text()
+    # gr_poly on a panel means decorative copper; pads alone do not count.
+    decorative = "gr_poly" in text
+    pads = "thru_hole" in text
+
+    body = NOTES_HEAD.format(
+        name=pcb.stem,
+        size=board_size(text),
+        mask="black, both sides" if '(color "Black")' in text else "your choice",
+        finish="ENIG" if '(copper_finish "ENIG")' in text else "your choice",
+    )
+    if decorative:
+        body += NOTES_RELIEF
+    else:
+        body += NOTES_PADS if pads else NOTES_BARE
+    return body + NOTES_TAIL.format(drill=NOTES_DRILL if pads else "")
 
 
 def export(folder):
@@ -138,9 +195,7 @@ def export(folder):
             "--excellon-units", "mm", "--excellon-oval-format", "route",
             "--drill-origin", "absolute", "-o", f"{plot}/", str(source))
 
-        (plot / "ORDER_NOTES.txt").write_text(
-            NOTES.format(name=folder.name, size=board_size(pcb))
-        )
+        (plot / "ORDER_NOTES.txt").write_text(notes(pcb))
 
         zip_path = OUT / f"{folder.name}_gerbers.zip"
         files = sorted(p for p in plot.iterdir() if p.is_file())
