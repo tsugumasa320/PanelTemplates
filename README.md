@@ -14,8 +14,8 @@ How to use it?
 ###### Now all of the templates are showing up, select the size you want
 5. Click OK and select where to create your KiCad panel project
 
-##### For now this project contains blank templates for 3U panels in these widths:
-- 02HP -  9.8  mm
+##### This project contains blank templates for 3U panels in these widths:
+- 02HP -  9.6  mm
 - 04HP - 20    mm
 - 06HP - 30    mm
 - 08HP - 40.3  mm
@@ -30,11 +30,17 @@ How to use it?
 - 28HP - 141.9 mm
 - 42HP - 213   mm
 
-Everything is according to [Doepfer A-100 Construction Details](https://doepfer.de/a100_man/a100m_e.htm).
+3U height is 128.5 mm according to [Doepfer A-100 Construction Details](https://doepfer.de/a100_man/a100m_e.htm).
+
+##### Also blank templates for Intellijel 1U panels in the same widths:
+
+1U Intellijel height is **39.65 mm**. Mounting holes use the same horizontal positions as the matching 3U templates, with vertical positions 3.0 mm from the top and bottom edges (Y = 3.0 and 36.65).
+
+Folder naming: `1U_Intellijel_XXHP_Blank`
 
 These templates for now just include edge cuts of the right size with plated oval holes.
 ![This is an image](8HP.png)
 
 ###### Shoutout to [@mzourack](https://github.com/mzourack) for his oval holes lol.
 
-##### Discussion, feedback and feature requests are welcome. Just hop on into the discussion section or create a new issue.
+##### Discussion, feedback and feature requests are welcome. Just hop on into the discussion section or create an issue.
