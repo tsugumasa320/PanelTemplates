@@ -1,2 +1,11 @@
 
 *.zip
+
+# KiCad per-user project state, rebuilt whenever a project is opened
+*.kicad_prl
+fp-info-cache
+
+# Pattern contact sheets and renders, rebuilt by _gen_relief.py
+_preview/
+
+.DS_Store
