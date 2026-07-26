@@ -44,6 +44,9 @@ COPPER_MIN = 0.15  # narrowest copper feature any fab will hold
 GAP_MIN = 0.15     # narrowest gap between neighbouring copper features
 PPM = 30           # raster resolution for verification (px per mm)
 
+PAD = (5.5, 3.7)   # mounting pad, matching the blank templates
+PAD_CLEAR = 0.5
+
 STYLES = ("emboss", "expose")
 
 
@@ -76,26 +79,35 @@ def clip_polygon(pts, rect):
     return out
 
 
-def clip_segment(a, b, rect):
-    """Liang-Barsky clip of a segment against an axis-aligned rect."""
-    x0, y0, x1, y1 = rect
-    dx, dy = b[0] - a[0], b[1] - a[1]
-    t0, t1 = 0.0, 1.0
-    for p, q in ((-dx, a[0] - x0), (dx, x1 - a[0]),
-                 (-dy, a[1] - y0), (dy, y1 - a[1])):
-        if abs(p) < 1e-12:
-            if q < 0:
-                return None
-            continue
-        t = q / p
-        if p < 0:
-            t0 = max(t0, t)
-        else:
-            t1 = min(t1, t)
-        if t0 > t1:
-            return None
-    return ((a[0] + dx * t0, a[1] + dy * t0),
-            (a[0] + dx * t1, a[1] + dy * t1))
+def pour_bands(bw, bh, holes, inset=EDGE_CLEAR):
+    """Rectangles that together cover the board but keep clear of the pads.
+
+    One rectangle would swallow the mounting pads, which DRC reads as both a
+    clearance and a soldermask bridge violation. Five bands notch out the four
+    corners without needing polygon subtraction.
+    """
+    xs = sorted({x for x, _ in holes})
+    ys = sorted({y for _, y in holes})
+    hx, hy = PAD[0] / 2 + PAD_CLEAR, PAD[1] / 2 + PAD_CLEAR
+    x0, x1 = xs[0] - hx, xs[0] + hx
+    x2, x3 = xs[-1] - hx, xs[-1] + hx
+    y1, y2 = ys[0] + hy, ys[-1] - hy
+
+    lo, hi_x, hi_y = inset, bw - inset, bh - inset
+    bands = [
+        (lo, lo, x0, hi_y),      # left of the pads, full height
+        (x3, lo, hi_x, hi_y),    # right of the pads, full height
+        (x0, y1, x3, y2),        # between the pad rows
+        (x1, lo, x2, y1),        # above, between the pad columns
+        (x1, y2, x2, hi_y),      # below, between the pad columns
+    ]
+    out = []
+    for bx0, by0, bx1, by1 in bands:
+        bx0, by0 = max(bx0, lo), max(by0, lo)
+        bx1, by1 = min(bx1, hi_x), min(by1, hi_y)
+        if bx1 - bx0 > 0.2 and by1 - by0 > 0.2:
+            out.append((bx0, by0, bx1, by1))
+    return out
 
 
 # --- pattern to layer geometry ------------------------------------------------
@@ -110,22 +122,75 @@ def arc_points(c, r, a1, a2):
     return [pp.on_circle(c, r, a1 + (a2 - a1) * k / n) for k in range(n + 1)]
 
 
+def dedupe(pts, eps=1e-6):
+    """Drop repeated vertices, which clipping leaves wherever a corner of the
+    shape happens to land exactly on the clip line."""
+    out = []
+    for p in pts:
+        if not out or math.dist(p, out[-1]) > eps:
+            out.append(p)
+    while len(out) > 1 and math.dist(out[0], out[-1]) <= eps:
+        out.pop()
+    return out
+
+
+def too_thin(pts):
+    """True for slivers a fab cannot hold.
+
+    For an elongated shape area/perimeter approaches half its width, which is a
+    cheap stand-in for measuring the width of an arbitrary clipped fragment.
+    """
+    perimeter = sum(math.dist(a, b) for a, b in zip(pts, pts[1:] + pts[:1]))
+    if perimeter < 1e-9:
+        return True
+    return abs(pp.signed_area(pts)) / perimeter < COPPER_MIN / 2
+
+
+def capsule(a, b, width, steps=6):
+    """Closed contour of a stroked segment, rounded at both ends.
+
+    Strokes become real outlines rather than wide lines, so a stroke that runs
+    off the edge of the clip window is cut flat at the window instead of
+    bulging half a linewidth past it.
+    """
+    h = width / 2
+    ex, ey = b[0] - a[0], b[1] - a[1]
+    base = math.degrees(math.atan2(ey, ex))
+    pts = [pp.on_circle(b, h, base - 90 + k * 180 / steps)
+           for k in range(steps + 1)]
+    pts += [pp.on_circle(a, h, base + 90 + k * 180 / steps)
+            for k in range(steps + 1)]
+    return pts
+
+
 def flatten(shapes, rect):
-    """Split the pattern into clipped filled polygons and clipped strokes."""
-    polys, strokes = [], []
+    """Turn the pattern into filled polygons clipped to `rect`.
+
+    Overlapping polygons are fine: copper and soldermask artwork unions, so
+    shared edges and stroke joins need no special handling.
+    """
+    polys = []
+
+    def add_poly(pts):
+        clipped = dedupe(clip_polygon(pts, rect))
+        if len(clipped) >= 3 and not too_thin(clipped):
+            polys.append(clipped)
 
     def add_stroke(points, width):
+        h = width / 2
         for a, b in zip(points, points[1:]):
-            piece = clip_segment(a, b, rect)
-            if piece and math.dist(*piece) > 1e-6:
-                strokes.append((piece[0], piece[1], width))
+            if math.dist(a, b) < 1e-9:
+                continue
+            if (max(a[0], b[0]) + h < rect[0] or min(a[0], b[0]) - h > rect[2]
+                    or max(a[1], b[1]) + h < rect[1]
+                    or min(a[1], b[1]) - h > rect[3]):
+                continue
+            add_poly(capsule(a, b, width))
 
     for shape in shapes:
         kind = shape[0]
         if kind == "poly":
-            poly = clip_polygon(shape[1], rect)
-            if len(poly) >= 3 and abs(pp.signed_area(poly)) > 1e-4:
-                polys.append(poly)
+            add_poly(shape[1])
         elif kind == "polyline":
             add_stroke(shape[1], shape[2])
         elif kind == "circle":
@@ -136,31 +201,31 @@ def flatten(shapes, rect):
             add_stroke(arc_points(c, r, a1, a2), width)
         else:
             raise ValueError(kind)
-    return polys, strokes
+    return polys
 
 
-def build(fn, style):
+def build(fn, style, clear_pads=False):
     inset = EDGE_CLEAR if style == "emboss" else MASK_CLEAR
-    rect = (inset, inset, W - inset, H - inset)
-    return flatten(fn(), rect)
+    shapes = fn()
+    if not clear_pads:
+        return flatten(shapes, (inset, inset, W - inset, H - inset))
+    # Clipping to the pad-avoiding bands instead of the whole board leaves the
+    # mounting pads bare, which costs a notch of pattern but keeps DRC quiet.
+    out = []
+    for band in pour_bands(W, H, pp.HOLES, inset):
+        out += flatten(shapes, band)
+    return out
 
 
 # --- verification -------------------------------------------------------------
 
-def raster(polys, strokes):
+def raster(polys, size=None):
     """Render the copper pattern as a bitmap for feature-size checks."""
-    img = Image.new("L", (int(W * PPM) + 1, int(H * PPM) + 1), 0)
+    w_mm, h_mm = size or (W, H)
+    img = Image.new("L", (int(w_mm * PPM) + 1, int(h_mm * PPM) + 1), 0)
     draw = ImageDraw.Draw(img)
     for poly in polys:
         draw.polygon([(x * PPM, y * PPM) for x, y in poly], fill=255)
-    for a, b, width in strokes:
-        w = max(1, int(round(width * PPM)))
-        draw.line([(a[0] * PPM, a[1] * PPM), (b[0] * PPM, b[1] * PPM)],
-                  fill=255, width=w)
-        for x, y in (a, b):  # round the caps so joins do not notch
-            r = w / 2
-            draw.ellipse([x * PPM - r, y * PPM - r, x * PPM + r, y * PPM + r],
-                         fill=255)
     return img
 
 
@@ -195,14 +260,14 @@ def area(img):
     return sum(img.histogram()[128:])
 
 
-def verify(polys, strokes):
+def verify(polys, size=None):
     """Flag copper features or gaps that a standard 5 mil process cannot hold.
 
     Morphological opening deletes anything thinner than the kernel and cannot
     bring it back, so a drop in area means the pattern has sub-minimum detail.
     Closing the inverse does the same for the gaps between features.
     """
-    img = raster(polys, strokes)
+    img = raster(polys, size)
     r = max(1, int(round(COPPER_MIN / 2 * PPM)))
     problems = []
 
@@ -272,8 +337,6 @@ STACKUP = """    (stackup
 COPPER_MM = 0.035  # 1 oz; ask for 2 oz to double the relief
 
 
-def board_rect(inset):
-    return pp.rect(inset, inset, W - 2 * inset, H - 2 * inset)
 
 
 def gr_poly(pts, layer):
@@ -282,13 +345,16 @@ def gr_poly(pts, layer):
             f'(fill solid) (tstamp {uuid.uuid4()}))\n')
 
 
-def gr_line(a, b, width, layer):
-    return (f'  (gr_line (start {a[0]:.4f} {a[1]:.4f}) '
-            f'(end {b[0]:.4f} {b[1]:.4f}) (layer "{layer}") '
-            f'(width {width:.4f}) (tstamp {uuid.uuid4()}))\n')
+def gr_text(text, at, layer, size=1.5, thickness=0.25, justify=""):
+    """Stroke-font text. Back layers need `mirror` to read the right way round."""
+    just = f" (justify {justify})" if justify else ""
+    return (f'  (gr_text "{text}" (at {at[0]:.4f} {at[1]:.4f}) '
+            f'(layer "{layer}") (tstamp {uuid.uuid4()})\n'
+            f'    (effects (font (size {size} {size}) '
+            f'(thickness {thickness})){just})\n  )\n')
 
 
-def write_panel(name, note, polys, strokes, style):
+def write_panel(name, note, polys, style):
     folder = OUT / f"1U_Intellijel_08HP_Relief_{name}"
     (folder / "meta").mkdir(parents=True, exist_ok=True)
 
@@ -304,16 +370,18 @@ def write_panel(name, note, polys, strokes, style):
     )
 
     # Back copper stays solid so the two sides balance and the board keeps flat.
-    body.append(gr_poly(board_rect(EDGE_CLEAR), "B.Cu"))
+    pour = [pp.rect(x0, y0, x1 - x0, y1 - y0)
+            for x0, y0, x1, y1 in pour_bands(W, H, pp.HOLES)]
+    for rect in pour:
+        body.append(gr_poly(rect, "B.Cu"))
 
     pattern_layer = "F.Cu" if style == "emboss" else "F.Mask"
     if style == "expose":
-        body.append(gr_poly(board_rect(EDGE_CLEAR), "F.Cu"))
+        for rect in pour:
+            body.append(gr_poly(rect, "F.Cu"))
     body.append("\n")
     for poly in polys:
         body.append(gr_poly(poly, pattern_layer))
-    for a, b, width in strokes:
-        body.append(gr_line(a, b, width, pattern_layer))
     body.append("\n)\n")
 
     (folder / f"{folder.name}.kicad_pcb").write_text("".join(body))
@@ -329,11 +397,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--style", default="emboss", choices=STYLES)
     ap.add_argument("--check-only", action="store_true")
+    ap.add_argument("--clear-pads", action="store_true",
+                    help="leave the mounting pads bare instead of running the "
+                         "pattern over them, which makes KiCad DRC clean")
     ap.add_argument("--only", default="")
     args = ap.parse_args()
     wanted = {n.strip() for n in args.only.split(",") if n.strip()}
 
-    if not args.check_only and OUT.exists():
+    # Only a full run owns the output directory; --only just refreshes a panel.
+    if not args.check_only and not wanted and OUT.exists():
         shutil.rmtree(OUT)
 
     results = []
@@ -341,22 +413,20 @@ def main():
     for batch, name, note, fn in pp.PATTERNS:
         if wanted and name not in wanted:
             continue
-        polys, strokes = build(fn, args.style)
-        problems = verify(polys, strokes)
-        results.append((name, len(polys), len(strokes), problems))
+        polys = build(fn, args.style, args.clear_pads)
+        problems = verify(polys)
+        results.append((name, len(polys), problems))
         if not problems and not args.check_only:
-            write_panel(name, note, polys, strokes, args.style)
-        shapes = [("poly", p) for p in polys]
-        shapes += [("polyline", [a, b], w) for a, b, w in strokes]
+            write_panel(name, note, polys, args.style)
         label = name if not problems else f"{name}  [FAIL]"
-        sheets[batch].append((label, note, shapes))
+        sheets[batch].append((label, note, [("poly", p) for p in polys]))
 
-    ok = [r for r in results if not r[3]]
+    ok = [r for r in results if not r[2]]
     print(f"{len(ok)}/{len(results)} panels pass  (style={args.style})\n")
-    for name, n_poly, n_stroke, problems in results:
+    for name, n_poly, problems in results:
         flag = "ok  " if not problems else "FAIL"
         detail = "" if not problems else "  <- " + "; ".join(problems)
-        print(f"  {flag} {name:<16} {n_poly:4d} poly {n_stroke:5d} line{detail}")
+        print(f"  {flag} {name:<16} {n_poly:5d} poly{detail}")
 
     # Draw the geometry that was actually emitted, not the abstract pattern.
     pp.OUT_DIR.mkdir(exist_ok=True)

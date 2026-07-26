@@ -97,6 +97,45 @@ standard 5 mil process.
 `python3 _preview_patterns.py --mode emboss` renders the whole set as a PNG
 contact sheet if you want to browse before generating.
 
+The pattern runs full bleed, straight over the mounting pads, which is
+deliberate: the screw heads cover that area anyway. KiCad DRC reports it as a
+clearance and soldermask bridge violation between the pattern and each pad.
+Nothing on these boards has a net, so the report is noise rather than a defect,
+but `python3 _gen_relief.py --clear-pads` generates a DRC-clean variant that
+leaves a bare notch around each pad instead.
+
+##### Relief texture test panel
+
+`testsheet/3U_28HP_ReliefTest` is one 3U 28HP board carrying 30 of the textures
+in a 6 x 5 grid, so a single order is enough to judge them all by hand. Each
+patch is 18.4 x 18.5 mm at true scale, with a copper index number under it and
+the number-to-name legend on the back silkscreen, keeping the front nothing but
+texture. The four mounting pads are intact, so it can be screwed into a rack.
+
+```bash
+python3 _gen_testsheet.py
+```
+
+Each patch is verified on its own raster, and the generator also refuses any
+patch whose copper reaches outside its own cell, which is what keeps the 1.4 mm
+lanes between patches and the pads clear.
+
+##### Fab output
+
+`_export_gerbers.py` drives the KiCad command line tool (8.0 or newer; set
+`KICAD_CLI` if it is somewhere unusual) to run DRC, plot Gerbers and the
+Excellon drill file, and zip them with a note covering the things a fab is
+likely to query.
+
+```bash
+python3 _export_gerbers.py                          # the test panel
+python3 _export_gerbers.py relief/1U_Intellijel_08HP_Relief_Ribs
+```
+
+The zip lands in `gerbers/`. Order it as 2 layers, 1.6 mm, black soldermask,
+ENIG, and ask for **2 oz outer copper**: on an emboss panel the copper weight
+is what sets how deep the texture feels.
+
 Blank templates include edge cuts with plated oval holes; converters add window / long-slot cutouts for flexible mounting.
 ![This is an image](8HP.png)
 

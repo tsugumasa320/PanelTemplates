@@ -8,4 +8,7 @@ fp-info-cache
 # Pattern contact sheets and renders, rebuilt by _gen_relief.py
 _preview/
 
+# Fab output, rebuilt by _export_gerbers.py
+gerbers/
+
 .DS_Store

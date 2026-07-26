@@ -128,7 +128,7 @@
     "pinned_symbol_libs": []
   },
   "meta": {
-    "filename": "1U_Intellijel_08HP_Blank.kicad_pro",
+    "filename": "3U_8HP_Blank.kicad_pro",
     "version": 1
   },
   "net_settings": {
@@ -162,7 +162,7 @@
       "idf": "",
       "netlist": "",
       "specctra_dsn": "",
-      "step": "1U_Intellijel_08HP_Blank.step",
+      "step": "3U_8HP_Blank.step",
       "vrml": ""
     },
     "page_layout_descr_file": ""
